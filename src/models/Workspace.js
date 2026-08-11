@@ -13,14 +13,21 @@ const SourceSchema = new mongoose.Schema({
   indexedAt: { type: Date, default: Date.now },
 });
 
-const SessionSchema = new mongoose.Schema(
+const WorkspaceSchema = new mongoose.Schema(
   {
-    sessionId: { type: String, required: true, unique: true, index: true },
+    workspaceId: { type: String, unique: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    title: { type: String, default: "Untitled Workspace" },
+    title: { type: String, required: true, default: "Untitled Workspace" },
     sources: [SourceSchema],
   },
   { timestamps: true }
 );
 
-export const Session = mongoose.model("Session", SessionSchema);
+WorkspaceSchema.pre("save", function (next) {
+  if (!this.workspaceId) {
+    this.workspaceId = this._id.toString();
+  }
+  next();
+});
+
+export const Workspace = mongoose.model("Workspace", WorkspaceSchema);

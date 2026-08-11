@@ -1,4 +1,4 @@
-import { processAndIndexDocument, getDocumentsBySession } from "../services/indexer.service.js";
+import { processAndIndexDocument, getDocumentsByWorkspace } from "../services/indexer.service.js";
 
 /**
  * Controller to handle document ingestion for PDFs, YouTube videos, and Websites.
@@ -6,15 +6,15 @@ import { processAndIndexDocument, getDocumentsBySession } from "../services/inde
  */
 export async function handleIndexDocument(req, res) {
   try {
-    const { type, url, sessionId } = req.body;
+    const { type, url, workspaceId } = req.body;
     const userId = req.user?._id;
 
     const hasFile = Boolean(req.file);
     const hasUrl = Boolean(url && typeof url === "string" && url.trim().length > 0);
 
-    // 1. Validate required sessionId and userId
-    if (!sessionId || typeof sessionId !== "string" || sessionId.trim().length === 0) {
-      return res.status(400).json({ error: "Field 'sessionId' is required to scope documents" });
+    // 1. Validate required workspaceId and userId
+    if (!workspaceId || typeof workspaceId !== "string" || workspaceId.trim().length === 0) {
+      return res.status(400).json({ error: "Field 'workspaceId' is required to scope documents" });
     }
 
     if (!userId) {
@@ -37,7 +37,7 @@ export async function handleIndexDocument(req, res) {
 
     let payload = {
       type: normalizedType,
-      sessionId: sessionId.trim(),
+      workspaceId: workspaceId.trim(),
       userId,
     };
 
@@ -61,7 +61,7 @@ export async function handleIndexDocument(req, res) {
       });
     }
 
-    console.log(`[Indexer Controller] Processing ${normalizedType} document for session: ${payload.sessionId} (user: ${userId})`);
+    console.log(`[Indexer Controller] Processing ${normalizedType} document for workspace: ${payload.workspaceId} (user: ${userId})`);
 
     // 5. Execute processing and vector indexing
     const result = await processAndIndexDocument(payload);
@@ -72,42 +72,43 @@ export async function handleIndexDocument(req, res) {
     });
   } catch (error) {
     console.error("Indexing Controller Error:", error);
-    return res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
       error: error.message || "Failed to process and index document",
     });
   }
 }
 
 /**
- * Controller to fetch all indexed document sources for a session
- * Endpoint: GET /api/indexer/session/:sessionId
+ * Controller to fetch all indexed document sources for a workspace
+ * Endpoint: GET /api/indexer/workspace/:workspaceId
  */
-export async function handleGetSessionSources(req, res) {
+export async function handleGetWorkspaceSources(req, res) {
   try {
-    const { sessionId } = req.params;
+    const { workspaceId } = req.params;
     const userId = req.user?._id;
 
-    if (!sessionId) {
-      return res.status(400).json({ error: "Session ID is required" });
+    if (!workspaceId) {
+      return res.status(400).json({ error: "Workspace ID is required" });
     }
 
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized user" });
     }
 
-    const sources = await getDocumentsBySession(sessionId, userId);
+    const sources = await getDocumentsByWorkspace(workspaceId, userId);
 
     return res.status(200).json({
-      message: "Session sources retrieved successfully",
+      message: "Workspace sources retrieved successfully",
       data: {
-        sessionId,
+        workspaceId,
         sources,
       },
     });
   } catch (error) {
-    console.error("Get Session Sources Error:", error);
+    console.error("Get Workspace Sources Error:", error);
     return res.status(500).json({
-      error: error.message || "Failed to retrieve session sources",
+      error: error.message || "Failed to retrieve workspace sources",
     });
   }
 }

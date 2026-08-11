@@ -6,7 +6,7 @@ import { loadPDF } from "../loaders/pdf.loader.js";
 import { loadYoutubeTranscript } from "../loaders/youtube.loader.js";
 import { loadWeb } from "../loaders/web.loader.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.utils.js";
-import { Session } from "../models/Session.js";
+import { Workspace } from "../models/Workspace.js";
 
 const embeddings = new OpenAIEmbeddings({
   model: config.openai.embeddingModel,
@@ -31,9 +31,21 @@ async function loadDocuments(source) {
 
 /**
  * Ingestion Pipeline for indexing PDF documents, YouTube transcripts, and Web pages into Qdrant
- * @param {Object} sourcePayload - Source payload containing type, sessionId, userId, filePath/url, originalName
+ * @param {Object} sourcePayload - Source payload containing type, workspaceId, userId, filePath/url, originalName
  */
 export async function processAndIndexDocument(sourcePayload) {
+  // 0. Verify workspace exists before doing any processing
+  const workspaceDoc = await Workspace.findOne({
+    workspaceId: sourcePayload.workspaceId,
+    userId: sourcePayload.userId,
+  });
+
+  if (!workspaceDoc) {
+    const error = new Error(`Workspace with ID '${sourcePayload.workspaceId}' does not exist. Please create a workspace first.`);
+    error.statusCode = 404;
+    throw error;
+  }
+
   console.log(`[Indexer] Loading documents for type: ${sourcePayload.type}...`);
 
   // 1. Extract/Parse raw document content
@@ -43,7 +55,7 @@ export async function processAndIndexDocument(sourcePayload) {
   let sourceUrl = sourcePayload.url || sourcePayload.originalName || sourcePayload.filePath;
 
   // 2. If PDF source, upload local temp file to Cloudinary
-  if (sourcePayload.type === "pdf" && sourcePayload.filePath) {
+  if (sourcePayload.type === "pdf" && sourcePayload.filePath) {  
     console.log("[Indexer] Uploading PDF file to Cloudinary...");
     cloudinaryResult = await uploadOnCloudinary(sourcePayload.filePath);
 
@@ -75,14 +87,14 @@ export async function processAndIndexDocument(sourcePayload) {
     rawDocs[0]?.metadata?.title ||
     sourcePayload.url;
 
-  console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (sessionId: ${sourcePayload.sessionId}, userId: ${sourcePayload.userId})...`);
+  console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (workspaceId: ${sourcePayload.workspaceId}, userId: ${sourcePayload.userId})...`);
 
   const enrichedChunks = chunks.map((chunk) => ({
     ...chunk,
     metadata: {
       ...chunk.metadata,
       title: documentTitle,
-      sessionId: sourcePayload.sessionId,
+      workspaceId: sourcePayload.workspaceId,
       userId: String(sourcePayload.userId),
       sourceType: sourcePayload.type,
       sourceUrl: sourceUrl,
@@ -113,37 +125,25 @@ export async function processAndIndexDocument(sourcePayload) {
     videoId = match && match[2].length === 11 ? match[2] : null;
   }
 
-  // Persist source metadata to MongoDB Session collection bound to userId
+  // Persist source metadata to MongoDB Workspace collection bound to userId
   try {
-    const sessionExists = await Session.findOne({
-      sessionId: sourcePayload.sessionId,
-      userId: sourcePayload.userId,
-    });
-
-    const updateObj = {
-      $set: { userId: sourcePayload.userId },
-      $addToSet: {
-        sources: {
-          title: documentTitle,
-          sourceType: sourcePayload.type,
-          sourceUrl: sourceUrl,
-          cloudinaryUrl: cloudinaryResult?.secure_url || null,
-          videoId: videoId,
+    await Workspace.findOneAndUpdate(
+      { workspaceId: sourcePayload.workspaceId, userId: sourcePayload.userId },
+      {
+        $addToSet: {
+          sources: {
+            title: documentTitle,
+            sourceType: sourcePayload.type,
+            sourceUrl: sourceUrl,
+            cloudinaryUrl: cloudinaryResult?.secure_url || null,
+            videoId: videoId,
+          },
         },
       },
-    };
-
-    if (!sessionExists || sessionExists.title === "Untitled Workspace") {
-      updateObj.$set.title = documentTitle;
-    }
-
-    await Session.findOneAndUpdate(
-      { sessionId: sourcePayload.sessionId, userId: sourcePayload.userId },
-      updateObj,
-      { upsert: true, returnDocument: 'after' }
+      { returnDocument: 'after' }
     );
   } catch (err) {
-    console.error("[Indexer] Failed to persist source to MongoDB Session:", err);
+    console.error("[Indexer] Failed to persist source to MongoDB Workspace:", err);
   }
 
   return {
@@ -158,14 +158,14 @@ export async function processAndIndexDocument(sourcePayload) {
 }
 
 /**
- * Retrieves list of indexed document sources for a specific session ID and user ID
+ * Retrieves list of indexed document sources for a specific workspace ID and user ID
  */
-export async function getDocumentsBySession(sessionId, userId) {
+export async function getDocumentsByWorkspace(workspaceId, userId) {
   try {
-    // 1. Try fetching sources from MongoDB Session document scoped to userId
-    const sessionDoc = await Session.findOne({ sessionId, userId });
-    if (sessionDoc && sessionDoc.sources && sessionDoc.sources.length > 0) {
-      return sessionDoc.sources.map((s) => ({
+    // 1. Try fetching sources from MongoDB Workspace document scoped to userId
+    const workspaceDoc = await Workspace.findOne({ workspaceId, userId });
+    if (workspaceDoc && workspaceDoc.sources && workspaceDoc.sources.length > 0) {
+      return workspaceDoc.sources.map((s) => ({
         title: s.title,
         sourceType: s.sourceType,
         sourceUrl: s.sourceUrl,
@@ -182,7 +182,7 @@ export async function getDocumentsBySession(sessionId, userId) {
     });
 
     const docs = await vectorStore.similaritySearch("", 100, {
-      must: [{ key: "metadata.sessionId", match: { value: sessionId } }],
+      must: [{ key: "metadata.workspaceId", match: { value: workspaceId } }],
     });
 
     const uniqueMap = new Map();
@@ -202,7 +202,7 @@ export async function getDocumentsBySession(sessionId, userId) {
 
     return Array.from(uniqueMap.values());
   } catch (error) {
-    console.error("Error retrieving session documents:", error);
+    console.error("Error retrieving workspace documents:", error);
     return [];
   }
 }

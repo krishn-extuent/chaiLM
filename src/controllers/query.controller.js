@@ -6,7 +6,7 @@ import { processQueryPipeline } from "../services/query.service.js";
  */
 export async function handleQuery(req, res) {
   try {
-    const { query, sessionId, selectedSourceIds } = req.body;
+    const { query, workspaceId, selectedSourceIds } = req.body;
     const userId = req.user?._id;
 
     // 1. Validation
@@ -16,9 +16,9 @@ export async function handleQuery(req, res) {
       });
     }
 
-    if (!sessionId || typeof sessionId !== "string" || sessionId.trim().length === 0) {
+    if (!workspaceId || typeof workspaceId !== "string" || workspaceId.trim().length === 0) {
       return res.status(400).json({
-        error: "Field 'sessionId' is required to scope retrieval to your workspace/chat",
+        error: "Field 'workspaceId' is required to scope retrieval to your workspace",
       });
     }
 
@@ -29,7 +29,7 @@ export async function handleQuery(req, res) {
     // 2. Execute RAG Pipeline with user scope
     const result = await processQueryPipeline({
       query: query.trim(),
-      sessionId: sessionId.trim(),
+      workspaceId: workspaceId.trim(),
       userId,
       selectedSourceIds: Array.isArray(selectedSourceIds) ? selectedSourceIds : [],
     });

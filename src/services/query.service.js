@@ -14,19 +14,19 @@ const embeddings = new OpenAIEmbeddings({
   apiKey: config.openai.apiKey,
 });
 
-export async function processQueryPipeline({ query, sessionId, userId, selectedSourceIds = [] }) {
+export async function processQueryPipeline({ query, workspaceId, userId, selectedSourceIds = [] }) {
   // 1. Instantiate vector store
   const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
     url: config.qdrant.url,
     collectionName: config.qdrant.collection,
   });
 
-  // 2. Fetch session title hint for HyDE
+  // 2. Fetch workspace title hint for HyDE
   let sourceTitleHint = "";
   try {
     const sampleDocs = await vectorStore.similaritySearch("", 1, {
       must: [
-        { key: "metadata.sessionId", match: { value: sessionId } },
+        { key: "metadata.workspaceId", match: { value: workspaceId } },
         ...(selectedSourceIds.length > 0
           ? [{ key: "metadata.sourceUrl", match: { any: selectedSourceIds } }]
           : []),
@@ -60,7 +60,7 @@ export async function processQueryPipeline({ query, sessionId, userId, selectedS
     k: config.retrieval.vectorTopK || 10,
     filter: {
       must: [
-        { key: "metadata.sessionId", match: { value: sessionId } },
+        { key: "metadata.workspaceId", match: { value: workspaceId } },
         ...(selectedSourceIds.length > 0
           ? [{ key: "metadata.sourceUrl", match: { any: selectedSourceIds } }]
           : []),
@@ -132,14 +132,14 @@ export async function processQueryPipeline({ query, sessionId, userId, selectedS
   // Persist User Query and Assistant Response to MongoDB ChatMessage collection with userId scope
   try {
     await ChatMessage.create({
-      sessionId,
+      workspaceId,
       userId,
       role: "user",
       query: query,
     });
 
     await ChatMessage.create({
-      sessionId,
+      workspaceId,
       userId,
       role: "assistant",
       answer: parsedAnswer,

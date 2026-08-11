@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { upload } from "../middlewares/multer.middlewares.js";
-import { handleIndexDocument, handleGetSessionSources } from "../controllers/indexer.controller.js";
+import { handleIndexDocument, handleGetWorkspaceSources } from "../controllers/indexer.controller.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -21,6 +21,6 @@ const handleUpload = (req, res, next) => {
 };
 
 router.post("/", handleUpload, handleIndexDocument);
-router.get("/session/:sessionId", handleGetSessionSources);
+router.get("/workspace/:workspaceId", handleGetWorkspaceSources);
 
 export default router;

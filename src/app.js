@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import indexerRoutes from './routes/indexer.routes.js';
 import queryRoutes from './routes/query.routes.js';
-import sessionRoutes from './routes/session.routes.js';
+import workspaceRoutes from './routes/workspace.routes.js';
 import userRoutes from './routes/user.routes.js';
 
 const app = express();
@@ -24,7 +24,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/indexer', indexerRoutes);
 app.use('/api/query', queryRoutes);
-app.use('/api/session', sessionRoutes);
+app.use('/api/workspace', workspaceRoutes);
 app.use('/api/user', userRoutes);
 
 export default app;
